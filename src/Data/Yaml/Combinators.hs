@@ -39,6 +39,8 @@ module Data.Yaml.Combinators
   ) where
 
 import Data.Aeson (Value(..), Object, Array)
+import qualified Data.Aeson.KeyMap as KM
+import qualified Data.Aeson.Key as K
 import Data.Scientific
 import Data.Yaml (decodeEither', encode)
 import Data.Text (Text)
@@ -419,7 +421,7 @@ newtype FieldParser a = FieldParser
 
 data FieldParserBase a where
   OneField
-    :: Text -- field name
+    :: K.Key -- field name
     -> ReaderT Object Validation a
     -> FieldParserBase a
   ExtraFields :: FieldParserBase Object
@@ -427,12 +429,12 @@ data FieldParserBase a where
 -- | Require an object field with the given name and with a value matched by
 -- the given 'Parser'.
 field
-  :: Text -- ^ field name
+  :: K.Key -- ^ field name
   -> Parser a -- ^ value parser
   -> FieldParser a
 field name p = FieldParser . Free.lift . OneField name $
   ReaderT $ \o ->
-    case HM.lookup name o of
+    case KM.lookup name o of
       Nothing -> Validation . Left $ ParseError 0 $ ExpectedAsPartOf (HS.singleton $ "field " ++ show name) $ Object o
       Just v -> runParserV p v
 
@@ -440,16 +442,16 @@ field name p = FieldParser . Free.lift . OneField name $
 -- | Declare an optional object field with the given name and with a value
 -- matched by the given 'Parser'.
 optField
-  :: Text -- ^ field name
+  :: K.Key -- ^ field name
   -> Parser a -- ^ value parser
   -> FieldParser (Maybe a)
 optField name p = FieldParser . Free.lift . OneField name $
-  ReaderT $ \o -> traverse (runParserV p) $ HM.lookup name o
+  ReaderT $ \o -> traverse (runParserV p) $ KM.lookup name o
 
 -- | Declare an optional object field with the given name and with a default
 -- to use if the field is absent.
 defaultField
-  :: Text -- ^ field name
+  :: K.Key -- ^ field name
   -> a -- ^ default value
   -> Parser a -- ^ value parser
   -> FieldParser a
@@ -470,7 +472,7 @@ defaultField name defaultVal p = fromMaybe defaultVal <$> optField name p
 -- >>> parse p "{type: number, value: 123}"
 -- Right (Right 123.0)
 theField
-  :: Text -- ^ key name
+  :: K.Key -- ^ key name
   -> Text -- ^ expected value
   -> FieldParser ()
 theField key value = field key (theString value)
@@ -534,9 +536,9 @@ object (FieldParser fp) = fromComponent $ Z $ ParserComponent $ Just $ const $ \
         OneField name _ -> StrictPair (HM.singleton name ()) (Any False)
         ExtraFields -> StrictPair mempty (Any True)
         ) fp
-      extra_fields = HM.difference o requested_names
+      extra_fields = KM.difference o $ KM.fromHashMap requested_names
       extra_fields_error =
-        when (not requested_extra_fields && not (HM.null extra_fields)) $
+        when (not requested_extra_fields && not (KM.null extra_fields)) $
           Validation . Left $ ParseError 0 $
             UnexpectedAsPartOf (Object extra_fields) (Object o)
     in

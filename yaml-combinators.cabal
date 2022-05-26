@@ -31,7 +31,7 @@ library
     Data.Yaml.Combinators.Free
   -- other-extensions:
   build-depends:
-    aeson,
+    aeson >= 2.0,
     base >= 4.11 && < 5,
     bytestring,
     generics-sop >= 0.5,
